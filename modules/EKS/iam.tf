@@ -1,77 +1,86 @@
-resource "random_integer" "random_suffix" {
-  min = 1000
-  max = 9999
-}
-
+###############################################
+# EKS Cluster IAM Role
+###############################################
 resource "aws_iam_role" "clusterrole" {
-  name = "eksClusterRole-${random_integer.random_suffix.result}"
+  name = "${var.cluster_name}-cluster-role"
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
       {
-        Action = ["sts:AssumeRole", "sts:TagSession"],
         Effect = "Allow",
         Principal = {
           Service = "eks.amazonaws.com"
-        }
+        },
+        Action = ["sts:AssumeRole", "sts:TagSession"]
       }
     ]
   })
+
+  tags = merge(var.common_tags, {
+    Name        = "${var.cluster_name}-cluster-role"
+    Environment = var.environment
+  })
 }
 
-resource "aws_iam_role_policy_attachment" "cluster_AmazonEKSClusterPolicy" {
+# Required policies
+resource "aws_iam_role_policy_attachment" "cluster_eks" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
   role       = aws_iam_role.clusterrole.name
 }
-resource "aws_iam_role_policy_attachment" "cluster_AmazonEKSVPCResourceController" {
+
+resource "aws_iam_role_policy_attachment" "cluster_vpc" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
   role       = aws_iam_role.clusterrole.name
 }
 
-
+###############################################
+# EKS Node IAM Role
+###############################################
 resource "aws_iam_role" "noderole" {
-  name = "eksNodeRole-${random_integer.random_suffix.result}"
+  name = "${var.cluster_name}-node-role"
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
       {
-        Action = "sts:AssumeRole",
         Effect = "Allow",
         Principal = {
           Service = "ec2.amazonaws.com"
-        }
+        },
+        Action = "sts:AssumeRole"
       }
     ]
   })
+
+  tags = merge(var.common_tags, {
+    Name        = "${var.cluster_name}-node-role"
+    Environment = var.environment
+  })
 }
 
-resource "aws_iam_role_policy_attachment" "node_AmazonEKSWorkerNodePolicy" {
+# Attach minimal policies for nodes
+resource "aws_iam_role_policy_attachment" "node_worker" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
   role       = aws_iam_role.noderole.name
 }
 
-# resource "aws_iam_role_policy_attachment" "node_AmazonEC2ContainerRegistryPullOnly" {
-#   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly"
-#   role       = aws_iam_role.noderole.name
-# }
-
-resource "aws_iam_role_policy_attachment" "node_AmazonEC2ContainerRegistryReadOnly" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-  role       = aws_iam_role.noderole.name
-}
-
-# arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
-resource "aws_iam_role_policy_attachment" "node_AmazonEKS_CNI_Policy" {
+resource "aws_iam_role_policy_attachment" "node_cni" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
   role       = aws_iam_role.noderole.name
 }
 
-resource "aws_iam_role_policy_attachment" "node_AmazonEBSCSIDriverPolicy" {
+resource "aws_iam_role_policy_attachment" "node_ecr" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+  role       = aws_iam_role.noderole.name
+}
+
+resource "aws_iam_role_policy_attachment" "node_ebs_csi" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
   role       = aws_iam_role.noderole.name
 }
 
-resource "aws_iam_role_policy_attachment" "node_AmazonSSMManagedInstanceCore" {
+resource "aws_iam_role_policy_attachment" "node_ssm" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
   role       = aws_iam_role.noderole.name
 }
