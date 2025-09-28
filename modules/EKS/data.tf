@@ -39,3 +39,11 @@ data "aws_security_group" "cluster_sg" {
   name = "eks-cluster-sg"
   vpc_id = data.aws_vpc.main.id
 }
+
+data "aws_security_group" "node_sg" {
+  filter {
+    name   = "tag:Name"
+    values = ["${local.name}-eks-nodes-sg"]
+  }
+  vpc_id = data.aws_vpc.main.id
+}
