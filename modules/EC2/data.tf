@@ -1,3 +1,9 @@
+###############################################
+# Ubuntu AMI Lookup
+# Purpose: Get the latest Ubuntu 24.04 AMI from Canonical.
+# Note: `most_recent = true` will change silently when Canonical publishes new images.
+#       Fine for dev/test, but in production it's safer to pin AMI IDs or pull from SSM.
+###############################################
 data "aws_ami" "ubuntu" {
   most_recent = true
 
@@ -10,6 +16,7 @@ data "aws_ami" "ubuntu" {
     name   = "virtualization-type"
     values = ["hvm"]
   }
+
   filter {
     name   = "architecture"
     values = ["x86_64"]
@@ -18,6 +25,24 @@ data "aws_ami" "ubuntu" {
   owners = ["099720109477"] # Canonical
 }
 
+# --- Production alternative ---
+# Instead of rolling `most_recent = true`, use AWS SSM Parameter Store which Canonical updates.
+# This way you always pull the official recommended AMI ID for Ubuntu 24.04 (x86_64).
+# Uncomment this block for production stability:
+#
+# data "aws_ssm_parameter" "ubuntu_ami" {
+#   name = "/aws/service/canonical/ubuntu/noble/stable/current/amd64/hvm/ebs-gp3/ami-id"
+# }
+#
+# Then reference it as: data.aws_ssm_parameter.ubuntu_ami.value
+# -------------------------------------------------------------
+
+###############################################
+# VPC Lookup
+# Purpose: Find the VPC by Name tag.
+# Note: Works if you tag VPCs consistently with `Name = local.name`.
+#       In production, prefer consuming `vpc_id` from module outputs instead of tag search.
+###############################################
 data "aws_vpc" "main" {
   filter {
     name   = "tag:Name"
@@ -25,23 +50,33 @@ data "aws_vpc" "main" {
   }
 }
 
+###############################################
+# Public Subnets Lookup
+# Purpose: Fetch public subnets in the VPC tagged for internet-facing ELBs.
+# Note: Safer to consume `public_subnet_ids` from VPC module outputs in production.
+###############################################
 data "aws_subnets" "public_subnets" {
   filter {
-    name   = "vpc-id"               # Filter by VPC ID
-    values = [data.aws_vpc.main.id] # VPC ID from the data source
+    name   = "vpc-id"
+    values = [data.aws_vpc.main.id]
   }
 
   filter {
-    name   = "tag:kubernetes.io/role/elb" # Filter by the specific tag
-    values = ["1"]                                 # Value to match
+    name   = "tag:kubernetes.io/role/elb"
+    values = ["1"]
   }
 }
 
+###############################################
+# Bastion Security Group Lookup
+# Purpose: Get the bastion SG (restricted SSH/VPN access).
+# Note: Much safer than using a world-open "allow_all" SG.
+#       For production, prefer wiring SG IDs via module outputs instead of lookups.
+###############################################
 data "aws_security_group" "ec2_sg" {
-  filter{
-    name = "tag:Name" # filter by tag name
-    values = ["allow_all"]
+  filter {
+    name   = "tag:Name"
+    values = ["${local.name}-bastion-sg"]
   }
-  name = "allow_all"
   vpc_id = data.aws_vpc.main.id
 }
