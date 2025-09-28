@@ -52,29 +52,58 @@ resource "aws_eks_addon" "example" {
 
 # https://github.com/terrablocks/aws-eks-unmanaged-node-group
 # managed node group 
+###############################################
+# EKS Managed Node Group (On-Demand Instances)
+# Purpose: Run worker nodes for the EKS cluster
+###############################################
 resource "aws_eks_node_group" "ondemand_nodes" {
+  # Link node group to this EKS cluster
   cluster_name    = aws_eks_cluster.my_cluster.name
   node_group_name = "${local.name}-on-demand-nodes-1"
+
+  # IAM role for the node group (must have EKS worker, CNI, EBS, and registry policies)
   node_role_arn   = aws_iam_role.noderole.arn
-  # subnet_ids      = [aws_subnet.private[0].id, aws_subnet.private[1].id]
+
+  # Use private subnets for nodes (no direct internet exposure)
   subnet_ids = data.aws_subnets.private_subnets.ids
-  scaling_config {
-    desired_size = 2
-    max_size     = 10
-    min_size     = 1
+
+  ###############################################
+  # Networking & Security
+  ###############################################
+  # Explicitly attach custom node SG created in VPC module
+  vpc_security_group_ids = [data.aws_security_group.node_sg.id]
+
+  # Allow SSH access only via bastion host SG (optional – good for debugging)
+  remote_access {
+    ec2_ssh_key               = var.ssh_key
+    source_security_group_ids = [var.bastion_sg_id]
   }
-  instance_types = ["t3.xlarge"] # t3.medium
+
+  ###############################################
+  # Scaling Config
+  ###############################################
+  scaling_config {
+    desired_size = 2   # number of nodes on launch
+    max_size     = 10  # cap for autoscaling
+    min_size     = 1   # ensures cluster always has at least 1 node
+  }
+
+  # Node type & storage
+  instance_types = ["t3.xlarge"]
   capacity_type  = "ON_DEMAND"
+  disk_size      = 80
+
   labels = {
     type = "ondemand"
   }
-  disk_size = "80"
+
   update_config {
-    max_unavailable = 1
+    max_unavailable = 1 # rolling updates, one node at a time
   }
 
-  # Ensure that IAM Role permissions are created before and deleted after EKS Node Group handling.
-  # Otherwise, EKS will not be able to properly delete EC2 Instances and Elastic Network Interfaces.
+  ###############################################
+  # Dependencies & Lifecycle
+  ###############################################
   depends_on = [
     aws_eks_cluster.my_cluster,
     aws_iam_role_policy_attachment.node_AmazonEKSWorkerNodePolicy,
@@ -82,22 +111,24 @@ resource "aws_eks_node_group" "ondemand_nodes" {
     aws_iam_role_policy_attachment.node_AmazonEC2ContainerRegistryReadOnly,
     aws_iam_role_policy_attachment.node_AmazonEBSCSIDriverPolicy,
   ]
-  # Allow external changes without terraform plan differences.
+
+  # Prevent Terraform from fighting with the cluster autoscaler
   lifecycle {
     ignore_changes = [scaling_config[0].desired_size]
   }
-  
+
+  ###############################################
+  # Tags
+  ###############################################
   tags = merge(
     var.tags,
     {
-      Name = "${local.name}-on-demand-managed-nodes"
+      Name                     = "${local.name}-on-demand-managed-nodes"
       "karpenter.sh/discovery" = var.cluster_name
-      # "k8s.io/cluster-autoscaler/enabled"             = "true", # for traditional cluster autoscaler
-      # "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned" # for traditional cluster autoscaler
-    },
-
+    }
   )
 }
+
 # for spot instances
 # resource "aws_eks_node_group" "spot_nodes" {
 #   cluster_name    = aws_eks_cluster.my_cluster.name
