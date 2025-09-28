@@ -1,14 +1,15 @@
 resource "aws_vpc" "main" {
-  cidr_block           = var.vpc_cidr
-  enable_dns_hostnames = var.enable_dns_hostnames
-  instance_tenancy     = "default"
-  enable_dns_support   = var.enable_dns_support
+  cidr_block           = var.vpc_cidr              # e.g. 10.0.0.0/16
+  enable_dns_support   = true                      # almost always true in prod
+  enable_dns_hostnames = true
 
   tags = merge(
     var.common_tags,
-    var.vpc_tags,
     {
-      Name = local.name
+      Name        = local.name
+      Environment = var.environment
+      Owner       = var.owner
+      CostCenter  = var.cost_center
     }
   )
 }
@@ -16,104 +17,113 @@ resource "aws_vpc" "main" {
 resource "aws_internet_gateway" "gw" {
   vpc_id = aws_vpc.main.id
 
-  tags = merge(
-    var.common_tags,
-    var.igw_tags,
-    {
-      Name = local.name
-    }
-  )
+  tags = merge(var.common_tags, { Name = "${local.name}-igw" })
 }
 
+# Explicit subnet CIDRs (safer in prod)
 resource "aws_subnet" "public" {
-  count                   = var.pub_subnet_count
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = cidrsubnet(var.vpc_cidr, 8, count.index + 1) #New Bits: 8 (Expanding the network from /16 to /24)
-  availability_zone       = element(data.aws_availability_zones.available.names, count.index)
+  for_each = var.public_subnets # map of {az => cidr}
+  vpc_id   = aws_vpc.main.id
+
+  cidr_block              = each.value
+  availability_zone       = each.key
   map_public_ip_on_launch = true
 
   tags = merge(
-    var.tags,
+    var.common_tags,
     {
-      Name                                        = "Public Subnet-${count.index + 1}"
-      "kubernetes.io/cluster/${var.cluster_name}" = "owned" # owned or shared
-      "kubernetes.io/role/elb"                    = "1"     # true or 1
+      Name                                        = "${local.name}-public-${each.key}"
+      "kubernetes.io/cluster/${var.cluster_name}" = "owned"
+      "kubernetes.io/role/elb"                    = "1"
     }
   )
-
 }
 
 resource "aws_subnet" "private" {
-  count                   = var.pri_subnet_count
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = cidrsubnet(var.vpc_cidr, 8, count.index + 3) # 1 means 192.168.1.0/24
-  availability_zone       = element(data.aws_availability_zones.available.names, count.index)
+  for_each = var.private_subnets
+  vpc_id   = aws_vpc.main.id
+
+  cidr_block              = each.value
+  availability_zone       = each.key
   map_public_ip_on_launch = false
 
   tags = merge(
-    var.tags,
-    {
-      Name                                            = "Private Subnet-${count.index + 1}"
-      "kubernetes.io/cluster/${var.cluster_name}"     = "owned" # owned or shared
-      "kubernetes.io/role/internal-elb"               = "1"     # true or 1
-      "karpenter.sh/discovery"                 = var.cluster_name #karpenter cluster autoscaler tags
-    }
-  )
-}
-
-resource "aws_eip" "eip" {
-  domain = "vpc"
-}
-
-resource "aws_nat_gateway" "main" {
-  allocation_id = aws_eip.eip.id
-  subnet_id     = aws_subnet.public[0].id
-
-  tags = merge(
     var.common_tags,
-    var.nat_gateway_tags,
     {
-      Name = "${local.name}"
+      Name                                        = "${local.name}-private-${each.key}"
+      "kubernetes.io/cluster/${var.cluster_name}" = "owned"
+      "kubernetes.io/role/internal-elb"           = "1"
+      "karpenter.sh/discovery"                    = var.cluster_name
     }
   )
+}
 
-  # To ensure proper ordering, it is recommended to add an explicit dependency
-  # on the Internet Gateway for the VPC.
+# NAT Gateway per AZ (production-grade HA)
+resource "aws_eip" "nat" {
+  for_each = aws_subnet.public
+  domain   = "vpc"
+
+  tags = { Name = "${local.name}-nat-eip-${each.key}" }
+}
+
+resource "aws_nat_gateway" "nat" {
+  for_each     = aws_subnet.public
+  allocation_id = aws_eip.nat[each.key].id
+  subnet_id     = each.value.id
+
+  tags = { Name = "${local.name}-nat-${each.key}" }
+
   depends_on = [aws_internet_gateway.gw]
 }
 
+# Route tables
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
-
-  tags = var.tags
+  tags   = { Name = "${local.name}-public-rt" }
 }
 
-resource "aws_route_table" "private" {
-  vpc_id = aws_vpc.main.id
-
-  tags = var.tags
-}
-
-resource "aws_route" "public_route" {
+resource "aws_route" "public_internet" {
   route_table_id         = aws_route_table.public.id
   gateway_id             = aws_internet_gateway.gw.id
   destination_cidr_block = "0.0.0.0/0"
 }
 
-resource "aws_route" "private_route" {
-  route_table_id         = aws_route_table.private.id
-  nat_gateway_id         = aws_nat_gateway.main.id
-  destination_cidr_block = "0.0.0.0/0"
-}
-
 resource "aws_route_table_association" "public" {
-  count          = var.pub_subnet_count
-  subnet_id      = aws_subnet.public[count.index].id
+  for_each      = aws_subnet.public
+  subnet_id     = each.value.id
   route_table_id = aws_route_table.public.id
 }
 
+# Private route tables per AZ -> NAT
+resource "aws_route_table" "private" {
+  for_each = aws_nat_gateway.nat
+  vpc_id   = aws_vpc.main.id
+  tags     = { Name = "${local.name}-private-rt-${each.key}" }
+}
+
+resource "aws_route" "private_nat" {
+  for_each             = aws_nat_gateway.nat
+  route_table_id       = aws_route_table.private[each.key].id
+  nat_gateway_id       = each.value.id
+  destination_cidr_block = "0.0.0.0/0"
+}
+
 resource "aws_route_table_association" "private" {
-  count          = var.pri_subnet_count
-  subnet_id      = aws_subnet.private[count.index].id
-  route_table_id = aws_route_table.private.id
+  for_each       = aws_subnet.private
+  subnet_id      = each.value.id
+  route_table_id = aws_route_table.private[each.key].id
+}
+
+# VPC Flow Logs for audit
+resource "aws_flow_log" "vpc" {
+  vpc_id          = aws_vpc.main.id
+  log_destination = aws_cloudwatch_log_group.vpc_logs.arn
+  traffic_type    = "ALL"
+
+  tags = { Name = "${local.name}-vpc-flowlogs" }
+}
+
+resource "aws_cloudwatch_log_group" "vpc_logs" {
+  name              = "/aws/vpc/${local.name}"
+  retention_in_days = 30
 }
