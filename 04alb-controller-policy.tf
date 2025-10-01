@@ -343,6 +343,29 @@ resource "aws_iam_role" "alb_controller_role" {
   })
 }
 
+# The above block "resource "aws_iam_role" "alb_controller_role"" can also be written this way which is cleaner, easier to 
+# extend, closer to HashiCorp’s recommended approach.
+# data "aws_iam_policy_document" "aws_lbc" {
+#   statement {
+#     effect = "Allow"
+#
+#     principals {
+#       type        = "Service"
+#       identifiers = ["pods.eks.amazonaws.com"]
+#     }
+#
+#     actions = [
+#       "sts:AssumeRole",
+#       "sts:TagSession"
+#     ]
+#   }
+# }
+#
+# resource "aws_iam_role" "aws_lbc" {
+#   name               = "${aws_eks_cluster.eks.name}-aws-lbc"
+#   assume_role_policy = data.aws_iam_policy_document.aws_lbc.json
+# }
+
 # Define IAM Policy for LBC, loading JSON from external file
 resource "aws_iam_policy" "alb_controller_policy" {
   # Policy name
