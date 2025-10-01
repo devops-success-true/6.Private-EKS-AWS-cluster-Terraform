@@ -314,6 +314,15 @@ resource "kubernetes_service_account" "alb_controller_sa" {
 # IAM Role & Policy for AWS Load Balancer Controller with Pod Identity service
 ##################################################
 
+# With this Pod Identity setup for AWS LBC is created: 
+# - IAM role (alb_controller_role) which trusts pods.eks.amazonaws.com (Pod Identity service).
+# - IAM policy (AWSLoadBalancerControllerIAMPolicy) which grants ELB/EC2/ACM/WAF permissions for LBC.
+# - Pod Identity association (aws_eks_pod_identity_association) which links: EKS cluster + kube-system/aws-load-balancer-controller SA + IAM role.
+# - Kubernetes ServiceAccount which is created in kube-system, no role-arn annotation needed (unlike IRSA).
+# - Helm chart is installed with serviceAccount.create=false, serviceAccount.name=aws-load-balancer-controller, and pods pods auto-get IAM creds via Pod Identity.
+
+# Works cleanly, no OIDC provider, no annotations.
+
 # Create IAM Role that the Pod Identity service will assume
 resource "aws_iam_role" "alb_controller_role" {
   # Role name
