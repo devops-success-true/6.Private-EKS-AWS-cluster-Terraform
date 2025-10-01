@@ -304,8 +304,14 @@ resource "kubernetes_service_account" "alb_controller_sa" {
   depends_on = [module.eks]
 }
 
+
+
+
+
+
+
 ##################################################
-# IAM Role & Policy for AWS Load Balancer Controller
+# IAM Role & Policy for AWS Load Balancer Controller with Pod Identity service
 ##################################################
 
 # Create IAM Role that the Pod Identity service will assume
