@@ -102,7 +102,6 @@ resource "helm_release" "aws_load_balancer_controller" {
 
   # Ensure SA + PodIdentity are ready before Helm deploys
   depends_on = [
-    kubernetes_service_account.alb_controller_sa,
     aws_eks_pod_identity_association.alb
   ]
 }
