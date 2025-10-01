@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: myapp
+  namespace: example-9
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-http"   # reference to ClusterIssuer
+spec:
+  tls:
+  - hosts:
+    - ex9.kastro.com
+    secretName: ex9-kastro-com   # cert-manager will create this
+  rules:
+  - host: ex9.kastro.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: myapp
+            port:
+              number: 8080
