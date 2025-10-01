@@ -1,3 +1,12 @@
+# In the upper part of this file is shown AWS Load Balancer Controller (LBC) implementation based on OIDC/IRSA
+# In the lower part of this file (the commented part) is shown AWS Load Balancer Controller (LBC) implementation based EKS Pod Identity (the newer way)
+
+# The OIDC/IRSA-based implementation of AWS LBC controller creates an IAM role (alb_controller_role) with sts:AssumeRoleWithWebIdentity, a trust policy which 
+# ties it to EKS cluster’s OIDC provider + the SA (system:serviceaccount:kube-system:aws-load-balancer-controller). Terraform deploys a Kubernetes ServiceAccount 
+# annotated with that IAM role ARN. Helm chart is installed with serviceAccount.create=false, serviceAccount.name=aws-load-balancer-controller.
+
+
+
 resource "aws_iam_role" "alb_controller_role" {
   name = "alb-controller-role"
   assume_role_policy = jsonencode({
@@ -293,4 +302,53 @@ resource "kubernetes_service_account" "alb_controller_sa" {
     }
   }
   depends_on = [module.eks]
+}
+
+##################################################
+# IAM Role & Policy for AWS Load Balancer Controller
+##################################################
+
+# Create IAM Role that the Pod Identity service will assume
+resource "aws_iam_role" "alb_controller_role" {
+  # Role name
+  name = "alb-controller-role"
+
+  # Trust policy: allow Pod Identity service to assume this role
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          Service = "pods.eks.amazonaws.com" # Pod Identity service principal
+        },
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+# Define IAM Policy for LBC, loading JSON from external file
+resource "aws_iam_policy" "alb_controller_policy" {
+  # Policy name
+  name        = "AWSLoadBalancerControllerIAMPolicy"
+  description = "Policy for AWS Load Balancer Controller"
+  policy      = file("${path.module}/../iam/lbc-policy.json") # external JSON file
+}
+
+# Attach IAM Policy to Role
+resource "aws_iam_role_policy_attachment" "alb_controller_attach" {
+  role       = aws_iam_role.alb_controller_role.name
+  policy_arn = aws_iam_policy.alb_controller_policy.arn
+}
+
+##################################################
+# Pod Identity Association
+# Links IAM role <-> ServiceAccount in EKS
+##################################################
+resource "aws_eks_pod_identity_association" "alb" {
+  cluster_name    = aws_eks_cluster.my_cluster.name      # target EKS cluster
+  namespace       = "kube-system"                       # namespace of SA
+  service_account = "aws-load-balancer-controller"      # SA name
+  role_arn        = aws_iam_role.alb_controller_role.arn # role bound to SA
 }
