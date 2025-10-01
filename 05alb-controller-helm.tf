@@ -1,3 +1,7 @@
+# In the upper part of this file is shown AWS Load Balancer Controller (LBC) implementation based on OIDC/IRSA
+# In the lower part of this file (the commented part) is shown AWS Load Balancer Controller (LBC) implementation based EKS Pod Identity (the newer way)
+
+
 resource "helm_release" "aws-load-balancer-controller" {
   name       = "aws-load-balancer-controller"
   repository = "https://aws.github.io/eks-charts"
