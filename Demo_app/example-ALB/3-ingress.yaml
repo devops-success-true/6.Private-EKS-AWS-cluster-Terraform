@@ -1,3 +1,8 @@
+# When the files of the example-NLB folder/app are applied, together with 04alb-controller-helm.tf and 04alb-controller-policy.tf, is created a ALB in AWS
+# with routes, paths, hosts to target specific pods in the cluster, each in its own target group. in other words an Application Load Balancer (ALB) 
+# is created in AWS. The controller creates target groups for each Service/Ingress backend. Routing rules, paths, and hosts in your Ingress map to ALB
+# listener rules, which forward traffic to the correct pods.
+
 ---
 # Supported annotations
 # https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.7/guide/ingress/annotations/
@@ -11,7 +16,7 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/healthcheck-path: /health
 spec:
-  ingressClassName: alb
+  ingressClassName: alb   # define here ingressClassName: alb to create ALB instead
   rules:
     - host: ex6.antonputra.com
       http:
