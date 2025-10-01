@@ -96,7 +96,7 @@ resource "helm_release" "aws_load_balancer_controller" {
     },
     {
       name  = "serviceAccount.name" # reuse SA we created
-      value = kubernetes_service_account.alb_controller_sa.metadata[0].name
+      value = "aws-load-balancer-controller" # kubernetes_service_account.alb_controller_sa.metadata[0].name
     }
   ]
 
