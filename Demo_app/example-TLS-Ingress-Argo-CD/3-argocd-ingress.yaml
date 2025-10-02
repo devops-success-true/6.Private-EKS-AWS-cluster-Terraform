@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-ingress
+  namespace: argocd
+spec:
+  ingressClassName: nginx-private         # tie to internal ingress controller
+  tls:
+  - hosts:
+    - argocd.internal.local
+    secretName: argocd-tls               # same as Certificate.secretName
+  rules:
+  - host: argocd.internal.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: argocd-server          # service created by the ArgoCD chart
+            port:
+              number: 80
