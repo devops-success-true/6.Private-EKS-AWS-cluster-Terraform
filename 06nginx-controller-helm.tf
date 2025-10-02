@@ -55,3 +55,46 @@ resource "helm_release" "nginx_ingress" {
 # - AWS LBC handles internet-facing, compliance-heavy workloads (TLS termination, WAF, Shield).
 # - NGINX handles internal routing, or apps where advanced traffic shaping is required.
 # It gives better control, security, and flexibility for the EKS cluster networking stack.
+
+# To mention: instead of only using this/these public Ingress controller(s) (pods) we can also use a seperate Nginx controller (pod) for setting up 
+# private loadbalancer for accessing internal resources like prometheous or grafana.
+# For this we should create another Ingress controller pod (ingressClass-router) as below, and then create its ingress resource which references 
+# this ingressclass and a private loadbalancer
+
+# resource "helm_release" "nginx_ingress_private" {
+#   name       = "nginx-ingress-private"
+#   repository = "https://kubernetes.github.io/ingress-nginx"
+#   chart      = "ingress-nginx"
+#   namespace  = "ingress-nginx-private"
+#   version    = "4.10.0"
+#
+#   create_namespace = true
+#
+#   set {
+#     name  = "controller.service.type"
+#     value = "LoadBalancer"
+#   }
+#
+#   set {
+#     name  = "controller.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-type"
+#     value = "external"
+#   }
+#
+#   set {
+#     name  = "controller.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-nlb-target-type"
+#     value = "ip"
+#   }
+#
+#   set {
+#     name  = "controller.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-scheme"
+#     value = "internal" # 👈 difference here
+#   }
+#
+#   set {
+#     name  = "controller.ingressClassResource.name"
+#     value = "nginx-private" # 👈 important to differentiate
+#   }
+# }
+
+
+
