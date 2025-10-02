@@ -29,5 +29,8 @@ resource "helm_release" "argocd" {
     }
   ]
 
-  depends_on = [helm_release.aws_load_balancer_controller]
+  depends_on = [
+  helm_release.nginx_ingress_private,
+  helm_release.cert_manager
+]
 }
