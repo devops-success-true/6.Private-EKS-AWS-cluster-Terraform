@@ -18,6 +18,7 @@ resource "helm_release" "nginx_ingress" {
   chart      = "ingress-nginx"
   namespace  = "ingress-nginx"
   version    = "4.10.0"
+  # values = [file("${path.module}/values/nginx-ingress.yaml")]     -- we could write this or list below the same values instead of this line
 
   create_namespace = true
 
