@@ -1,0 +1,12 @@
+# How ClusterIssuer might look if using AWS ACM Private CA
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: private-ca-issuer
+spec:
+  ca:
+    secretName: private-ca-keypair
+
+# secretName: "private-ca-keypair" points to a Kubernetes Secret that stores your private CA’s cert + key.
+# This secret can be created manually (imported from ACM/Vault, or generated via cert-manager bootstrap).
+
