@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-ingress
+  namespace: monitoring
+  annotations:
+    kubernetes.io/ingress.class: nginx-private  # references private ingressClass (controller/pod/router)
+spec:
+  tls:
+  - hosts:
+    - grafana.internal.local
+    secretName: grafana-tls              # matches Certificate.secretName
+  rules:
+  - host: grafana.internal.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana
+            port:
+              number: 3000
