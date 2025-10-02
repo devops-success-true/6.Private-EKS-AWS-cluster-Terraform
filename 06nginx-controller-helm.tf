@@ -41,3 +41,17 @@ resource "helm_release" "nginx_ingress" {
     value = "internet-facing"
   }
 }
+
+
+
+# We can also deploy and use in the same time two (2) ingress controllers in the EKS cluster:
+# 1. AWS Load Balancer Controller (LBC) — to create AWS NLB (also ALB), supports ACM TLS certs, WAF, Shield, Route53, and autoscaling. 
+#    Commonly used for production workloads that need AWS-native security, compliance, and advanced LB features (e.g., WAF, Shield, Global Accelerator).
+# 2. NGINX Ingress Controller — we can deploy it in many clusters for flexibility:
+#    - Supports fine-grained path-based routing and rewrite rules.
+#    - Works well for internal apps, canary releases, or when you want vendor-neutral ingress logic.
+#
+# This hybrid approach (LBC + NGINX) is common in DevOps practices:
+# - AWS LBC handles internet-facing, compliance-heavy workloads (TLS termination, WAF, Shield).
+# - NGINX handles internal routing, or apps where advanced traffic shaping is required.
+# It gives better control, security, and flexibility for the EKS cluster networking stack.
