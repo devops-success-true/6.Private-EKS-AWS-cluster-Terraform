@@ -6,6 +6,7 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-http"   # reference to ClusterIssuer
 spec:
+  ingressClassName: external-nginx   # the ingressClass name I gave in Helm values
   tls:
   - hosts:
     - ex9.kastro.com
