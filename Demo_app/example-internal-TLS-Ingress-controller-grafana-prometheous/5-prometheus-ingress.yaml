@@ -3,13 +3,12 @@ kind: Ingress
 metadata:
   name: prometheus-ingress
   namespace: monitoring
-  annotations:
-    kubernetes.io/ingress.class: nginx-private  # refernces ingressClass (pod, router, controller)
 spec:
+  ingressClassName: nginx-private   # # refernces ingressClass (pod, router, controller)
   tls:
   - hosts:
     - prometheus.internal.local
-    secretName: prometheus-tls           # match Certificate.secretName
+    secretName: prometheus-tls      # matches Certificate.secretName
   rules:
   - host: prometheus.internal.local
     http:
@@ -18,6 +17,7 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: prometheus-k8s
+            name: prometheus-k8s    # service to must match the deployed Prometheus svc
             port:
               number: 9090
+
