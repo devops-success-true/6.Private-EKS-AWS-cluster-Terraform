@@ -1,0 +1,12 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: grafana-cert
+  namespace: monitoring
+spec:
+  secretName: grafana-tls                # Secret that will hold the TLS cert+key
+  issuerRef:
+    kind: ClusterIssuer                  # Uses the private ClusterIssuer
+    name: private-ca-issuer
+  dnsNames:
+    - grafana.internal.local             # FQDN for Grafana
