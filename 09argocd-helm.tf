@@ -5,7 +5,7 @@ resource "helm_release" "argocd" {
   version          = "7.8.7"
   namespace        = "argocd"
   create_namespace = true
-  #   timeout          = 2000
+
   cleanup_on_fail = true
   recreate_pods   = true
   replace         = true
@@ -13,21 +13,21 @@ resource "helm_release" "argocd" {
   set = [
     {
       name  = "server.service.type"
-      value = "ClusterIP" #LoadBalancer #ClusterIP #NodePort
+      value = "ClusterIP" # expose only inside cluster, ingress handles LB
     },
     {
       name  = "server.ingress.enabled"
-      value = "false"
+      value = "true"
+    },
+    {
+      name  = "server.ingress.ingressClassName"
+      value = "nginx-private" # internal controller
     },
     {
       name  = "server.extraArgs[0]"
       value = "--insecure"
-    },
-    {
-      name  = "server.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-internal"
-      value = "false"
     }
   ]
 
-  depends_on = [helm_release.aws-load-balancer-controller]
+  depends_on = [helm_release.aws_load_balancer_controller]
 }
