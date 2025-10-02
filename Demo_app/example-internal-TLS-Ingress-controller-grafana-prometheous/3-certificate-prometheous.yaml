@@ -1,0 +1,12 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: prometheus-cert
+  namespace: monitoring
+spec:
+  secretName: prometheus-tls             # Secret that will hold TLS cert+key
+  issuerRef:
+    kind: ClusterIssuer
+    name: private-ca-issuer              # Same private issuer as Grafana
+  dnsNames:
+    - prometheus.internal.local          # FQDN for Prometheus
