@@ -314,21 +314,10 @@ resource "kubernetes_service_account" "alb_controller_sa" {
 # IAM Role & Policy for AWS Load Balancer Controller with Pod Identity service
 ##################################################
 
-# With this Pod Identity setup for AWS LBC is created: 
-# - IAM role (alb_controller_role) which trusts pods.eks.amazonaws.com (Pod Identity service).
-# - IAM policy (AWSLoadBalancerControllerIAMPolicy) which grants ELB/EC2/ACM/WAF permissions for LBC.
-# - Pod Identity association (aws_eks_pod_identity_association) which links: EKS cluster + kube-system/aws-load-balancer-controller SA + IAM role.
-# - Kubernetes ServiceAccount which is created in kube-system, no role-arn annotation needed (unlike IRSA).
-# - Helm chart is installed with serviceAccount.create=false, serviceAccount.name=aws-load-balancer-controller, and pods pods auto-get IAM creds via Pod Identity.
-
-# Works cleanly, no OIDC provider, no annotations.
-
-# Create IAM Role that the Pod Identity service will assume
+# IAM Role trusted by EKS Pod Identity service
 resource "aws_iam_role" "alb_controller_role" {
-  # Role name
-  name = "alb-controller-role"
+  name = "${var.cluster_name}-alb-controller-role"
 
-  # Trust policy: allow Pod Identity service to assume this role
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
@@ -343,35 +332,11 @@ resource "aws_iam_role" "alb_controller_role" {
   })
 }
 
-# The above block "resource "aws_iam_role" "alb_controller_role"" can also be written this way which is cleaner, easier to 
-# extend, closer to HashiCorp’s recommended approach.
-# data "aws_iam_policy_document" "aws_lbc" {
-#   statement {
-#     effect = "Allow"
-#
-#     principals {
-#       type        = "Service"
-#       identifiers = ["pods.eks.amazonaws.com"]
-#     }
-#
-#     actions = [
-#       "sts:AssumeRole",
-#       "sts:TagSession"
-#     ]
-#   }
-# }
-#
-# resource "aws_iam_role" "aws_lbc" {
-#   name               = "${aws_eks_cluster.eks.name}-aws-lbc"
-#   assume_role_policy = data.aws_iam_policy_document.aws_lbc.json
-# }
-
-# Define IAM Policy for LBC, loading JSON from external file
+# IAM Policy for AWS Load Balancer Controller (external JSON file recommended)
 resource "aws_iam_policy" "alb_controller_policy" {
-  # Policy name
   name        = "AWSLoadBalancerControllerIAMPolicy"
   description = "Policy for AWS Load Balancer Controller"
-  policy      = file("${path.module}/../iam/lbc-policy.json") # external JSON file
+  policy      = file("${path.root}/iam/lbc-policy.json") # external JSON file with ELB/EC2/ACM/WAF actions
 }
 
 # Attach IAM Policy to Role
@@ -385,8 +350,8 @@ resource "aws_iam_role_policy_attachment" "alb_controller_attach" {
 # Links IAM role <-> ServiceAccount in EKS
 ##################################################
 resource "aws_eks_pod_identity_association" "alb" {
-  cluster_name    = aws_eks_cluster.my_cluster.name      # target EKS cluster
-  namespace       = "kube-system"                       # namespace of SA
-  service_account = "aws-load-balancer-controller"      # SA name
-  role_arn        = aws_iam_role.alb_controller_role.arn # role bound to SA
+  cluster_name    = module.eks.cluster_name              # from your EKS module output
+  namespace       = "kube-system"
+  service_account = "aws-load-balancer-controller"
+  role_arn        = aws_iam_role.alb_controller_role.arn
 }
