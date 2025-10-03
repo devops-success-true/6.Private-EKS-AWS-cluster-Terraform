@@ -354,4 +354,6 @@ resource "aws_eks_pod_identity_association" "alb" {
   namespace       = "kube-system"
   service_account = "aws-load-balancer-controller"
   role_arn        = aws_iam_role.alb_controller_role.arn
+
+  depends_on = [aws_eks_addon.pod_identity]
 }
