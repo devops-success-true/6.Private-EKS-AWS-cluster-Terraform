@@ -71,6 +71,8 @@ resource "aws_eks_pod_identity_association" "cluster_autoscaler" {
   namespace       = "kube-system"
   service_account = "cluster-autoscaler"
   role_arn        = aws_iam_role.cluster_autoscaler.arn
+  
+  depends_on = [aws_eks_addon.pod_identity]
 }
 
 ##################################################
