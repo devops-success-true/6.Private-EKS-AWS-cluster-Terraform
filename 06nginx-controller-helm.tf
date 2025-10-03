@@ -7,6 +7,8 @@
 # with NGINX Ingress Controller implementation: 
 # - it runs purely inside the cluster. It does not need to talk to AWS APIs. It just exposes itself via a Service of type LoadBalancer 
 # and EKS automatically provisions an NLB. Therefore: No IAM role, no pod identity, no big JSON policy needed.
+# No Pod Identity needed for NGINX Ingress Controller. Just a Service of type LoadBalancer is enough as EKS control plane (not the pod) asks AWS to provision an NLB.
+# Pod Identity is only required for controllers that must call AWS APIs (e.g., AWS LBC, Cluster Autoscaler, EBS/EFS CSI drivers, ExternalDNS).
 
 
 # With this code is installed NGINX ingress controller in its own namespace, exposed via NLB. Afterwards we just need the App Deployment yaml file, 
