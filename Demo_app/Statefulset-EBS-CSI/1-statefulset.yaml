@@ -3,7 +3,6 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: myapp
-  namespace: 10-example
 spec:
   serviceName: nginx
   replicas: 1
@@ -28,8 +27,8 @@ spec:
     - metadata:
         name: data
       spec:
-        storageClassName: gp2
         accessModes: [ReadWriteOnce]
+        storageClassName: gp3-exp
         resources:
           requests:
             storage: 5Gi
