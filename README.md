@@ -44,6 +44,8 @@ Developers → Push manifests to GitHub Repo
               │         ├──> OIDC Provider (IAM Auth for Service Accounts)
               │         ├──> ALB Ingress Controller (Ingress/Load Balancing)
               │         ├──> Cluster Autoscaler / Karpenter (Dynamic Scaling)
+              │         ├──> Metrics Server (Pod Metrics for HPA)
+              │         ├──> Pod Identity Addon (IAM-to-Pod Federation)
               │         └──> Prometheus + Grafana (Monitoring)
               │
               ▼
@@ -77,26 +79,79 @@ All communication to AWS APIs happens via **VPC Interface Endpoints** — no Int
   - ALB Controller
   - ArgoCD
   - EBS CSI Driver
+  - Pod Identity Addon
 - Uses `aws_iam_openid_connect_provider` for federated identity
 
 ### 4️⃣ **Controllers & Addons**
-- **Metrics Server**
-- **Cluster Autoscaler**
-- **ALB Ingress Controller**
-- **EBS CSI Driver**
-- **Nginx Ingress (optional)**
-- **Cert Manager**
-- All deployed via **Helm releases** managed in Terraform
+- **Metrics Server** (`04-metrics-server.tf`) – exposes CPU/memory usage for autoscaling.  
+- **Cluster Autoscaler** (`06-cluster-autoscaler.tf`) – scales nodes up/down when pods pending.  
+- **Pod Identity Addon** (`05-pod-identity-addon.tf`) – allows workloads to assume AWS roles securely (IRSA).  
+- **ALB Ingress Controller** (`07` + `08`) – handles external routing using AWS ALB.  
+- **NGINX Ingress Controller** (`09`) – manages internal ingress and local routing.  
+- **Cert-Manager** (`10`) – provisions TLS certificates for ingress (Let's Encrypt).  
+- **Monitoring** (`15_monitoring.tf`) – provides Prometheus + Grafana metrics dashboards.  
 
 ### 5️⃣ **GitOps (ArgoCD)**
-- Deploys ArgoCD via Helm
-- Configures repositories for app synchronization
-- Automates manifest deployment from Git → Kubernetes
+- Deployed via Helm and linked to a Git repository.  
+- Automatically syncs manifests from Git → EKS cluster.
 
 ### 6️⃣ **Monitoring**
-- Deploys Prometheus + Grafana stack
-- Optional CloudWatch Container Insights integration
-- Exposes dashboards via internal Ingress
+- Deploys Prometheus and Grafana stacks with ServiceMonitor integrations.  
+- Observes scaling metrics, ingress health, TLS renewal, and pod resource usage.
+
+---
+
+## 🧠 Scenarios-Implementations Overview
+
+The directory `Scenarios-implementations/` demonstrates real-world conditions that **trigger autoscaling, ingress routing, and TLS events**.  
+These YAML files simulate production workloads under load and verify functional behavior of Terraform-managed EKS resources.
+
+| Folder | Description | Related Terraform Files |
+|---------|--------------|--------------------------|
+| **1.HPA** | Deploys an app with Horizontal Pod Autoscaler. Increases replica count when CPU usage (from Metrics Server) exceeds threshold. If cluster runs out of nodes, Cluster Autoscaler provisions more EC2 instances. | `04`, `05`, `06`, `15_monitoring.tf` |
+| **2.ALB-Scenario** | Demonstrates AWS ALB Controller (Helm `08` and policy `07`) creating ALB resources when a Kubernetes Ingress object is applied. | `07`, `08` |
+| **3.ALB-Scenario-Advanced** | Path-based routing (`/`, `/api`, `/health`). Validates OIDC roles via Pod Identity Addon for secure AWS API access. | `05`, `07`, `08` |
+| **4.NGINX-Scenario** | Deploys internal ingress through NGINX Helm (`09`). Routes internal-only traffic (ClusterIP). | `09` |
+| **5.NGINX-TLS** | Demonstrates TLS provisioning with Cert-Manager for NGINX ingress (`09` + `10`). | `09`, `10` |
+| **6.TLS-Validation** | Uses curl/browser verification for certificates. Checks via Prometheus that SSL expiration and validity are healthy. | `09`, `10`, `15_monitoring.tf` |
+| **7.Ingress-Load-Test** | Applies high traffic to test ALB + NGINX ingress resilience and triggers autoscaler expansion under load. | `04`, `06`, `09`, `10`, `15_monitoring.tf` |
+
+---
+
+## ⚙️ Functional Workflows
+
+### 📈 **Metrics Server + Cluster Autoscaler + HPA**
+1. Metrics Server reports pod CPU/memory usage to Kubernetes API.  
+2. HPA YAML (`Scenarios-implementations/1.HPA/`) monitors those metrics.  
+3. When thresholds are exceeded → replicas scale up.  
+4. If nodes can’t fit new pods → Cluster Autoscaler triggers.  
+5. Autoscaler checks pending pods → adds EC2 worker nodes dynamically.  
+6. Once load subsides → HPA and Autoscaler scale down.  
+7. Grafana dashboard (from `15_monitoring.tf`) visualizes these events.
+
+### 🔑 **Pod Identity Addon**
+- Configured in `05-pod-identity-addon.tf`.  
+- Attaches IAM Roles for Service Accounts (IRSA) to specific pods (like ALB, Autoscaler).  
+- Enables AWS SDK calls without static credentials.  
+- Used by ALB Controller and Cluster Autoscaler pods.  
+
+### 🌐 **ALB Controller (07 + 08)**
+- Terraform installs policy (07) + Helm chart (08).  
+- Watches for Kubernetes Ingress resources with annotation `alb.ingress.kubernetes.io/scheme`.  
+- Automatically provisions ALB + target groups + listeners.  
+- Demonstrated in `Scenarios-implementations/2.ALB-Scenario/` and `/3.ALB-Scenario-Advanced/`.
+
+### ⚙️ **NGINX Ingress Controller (09)**
+- Deployed via Helm in `09nginx-controller-helm.tf`.  
+- Handles internal traffic (ClusterIP).  
+- Routes requests defined in `Scenarios-implementations/4.NGINX-Scenario/`.  
+- Integrated with TLS via `Cert-Manager` (`10cert-manager.tf`).
+
+### 🔐 **NGINX + TLS + Cert-Manager**
+- Cert-Manager requests and renews certificates from Let’s Encrypt.  
+- TLS-enabled ingress manifests found in `Scenarios-implementations/5.*`, `/6.*`, `/7.*`.  
+- Demonstrates secure ingress under load with ALB + NGINX.  
+- Grafana dashboards visualize cert renewal success/failure metrics.
 
 ---
 
@@ -106,44 +161,24 @@ All communication to AWS APIs happens via **VPC Interface Endpoints** — no Int
 - AWS CLI configured (`aws configure`)  
 - IAM permissions for VPC, EKS, IAM, and S3  
 - S3 bucket + DynamoDB table for Terraform remote backend  
-- Git repository for ArgoCD sync
+- Git repository for ArgoCD sync  
 
 ---
 
 ## 🪜 Deployment Steps
 
-### 1. **Set up Backend**
-```bash
-aws s3api create-bucket --bucket tfstate-eks-cluster --region us-east-1
-aws dynamodb create-table   --table-name terraform-locks   --attribute-definitions AttributeName=LockID,AttributeType=S   --key-schema AttributeName=LockID,KeyType=HASH   --billing-mode PAY_PER_REQUEST
-```
-
-### 2. **Initialize Terraform**
 ```bash
 terraform init
-```
-
-### 3. **Validate & Plan**
-```bash
-terraform validate
 terraform plan -var-file="values/prod.tfvars"
-```
-
-### 4. **Apply Infrastructure**
-```bash
 terraform apply -auto-approve -var-file="values/prod.tfvars"
-```
 
-### 5. **Configure Kubeconfig**
-```bash
-aws eks update-kubeconfig --name <cluster_name> --region <region> --alias eks-private
-```
+aws eks update-kubeconfig --name <cluster_name> --region <region>
 
-### 6. **Deploy Applications via ArgoCD**
-```bash
-kubectl port-forward svc/argocd-server -n argocd 8080:443
+# Run workload scenarios
+kubectl apply -f Scenarios-implementations/1.HPA/
+kubectl apply -f Scenarios-implementations/2.ALB-Scenario/
+kubectl apply -f Scenarios-implementations/4.NGINX-Scenario/
 ```
-Then visit [https://localhost:8080](https://localhost:8080)
 
 ---
 
@@ -151,9 +186,6 @@ Then visit [https://localhost:8080](https://localhost:8080)
 
 ```
 .
-├── 01provider.tf
-├── 02backend.tf
-├── 03main.tf
 ├── 04-metrics-server.tf
 ├── 05-pod-identity-addon.tf
 ├── 06-cluster-autoscaler.tf
@@ -161,25 +193,15 @@ Then visit [https://localhost:8080](https://localhost:8080)
 ├── 08alb-controller-helm.tf
 ├── 09nginx-controller-helm.tf
 ├── 10cert-manager.tf
-├── 11-ebs-csi-driver.tf
-├── 12argocd-helm.tf
-├── 13karpenter-helm.tf
-├── 14_karp_test_testing.tf
 ├── 15_monitoring.tf
-├── modules/
-│   ├── eks/
-│   ├── networking/
-│   ├── iam/
-│   ├── gitops/
-│   └── monitoring/
-├── values/
-│   ├── prod.tfvars
-│   ├── staging.tfvars
-│   └── dev.tfvars
-├── variables.tf
-├── output.tf
-├── rbac.tf
-└── terraform.tfvars (optional)
+├── Scenarios-implementations/
+│   ├── 1.HPA/
+│   ├── 2.ALB-Scenario/
+│   ├── 3.ALB-Scenario-Advanced/
+│   ├── 4.NGINX-Scenario/
+│   ├── 5.NGINX-TLS/
+│   ├── 6.TLS-Validation/
+│   └── 7.Ingress-Load-Test/
 ```
 
 ---
@@ -194,22 +216,29 @@ Then visit [https://localhost:8080](https://localhost:8080)
 | **VPC Endpoints** | No internet egress for AWS API calls |
 | **Encrypted Volumes** | EBS CSI driver with encryption enabled |
 | **GitOps Security** | All changes go through Git reviews |
+| **TLS Enforcement** | Automated with Cert-Manager and ingress controllers |
+| **Metrics Visibility** | Centralized via Prometheus + Grafana |
 
 ---
 
 ## 🧠 Real DevOps Takeaways
 
-- **Full private EKS cluster** = no public API exposure  
-- **OIDC integration** = fine-grained least privilege IAM policies  
-- **GitOps** = application delivery through Git (no manual `kubectl`)  
-- **Monitoring stack** = real observability + automation  
-- **Terraform modularization** = scalable infra across multiple environments  
+- **Cluster Autoscaler + HPA + Metrics Server** simulate real scaling under traffic.  
+- **ALB + NGINX Controllers** mirror real-world hybrid ingress setups.  
+- **Cert-Manager** manages TLS lifecycle for both internal and external ingress.  
+- **Pod Identity Addon (IRSA)** provides fine-grained access control securely.  
+- **Monitoring Stack** gives full visibility into scaling, latency, and cert health.  
 
-This repo represents what actual DevOps teams build in production at scale.
-
+This repo reflects a **production-grade EKS ecosystem** that integrates autoscaling, ingress, and observability seamlessly.
 
 ---
 
 ## 👨‍💻 Author
-**Anton Putra and xxx**  
-Focus: AWS, Terraform, Kubernetes, CI/CD, Cloud Infrastructure  
+**Kastro** – DevOps & Cloud Engineer  
+Focus: AWS, Terraform, Kubernetes, CI/CD, Cloud Infrastructure.  
+GitHub: [devops-success-true](https://github.com/devops-success-true)
+
+---
+
+## 📜 License
+MIT License – Free for personal and professional use.
