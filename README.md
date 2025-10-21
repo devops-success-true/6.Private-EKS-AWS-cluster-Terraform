@@ -234,9 +234,15 @@ This repo reflects a **production-grade EKS ecosystem** that integrates autoscal
 ---
 
 ## 👨‍💻 Author
+
 **Kastro** – DevOps & Cloud Engineer  
-Focus: AWS, Terraform, Kubernetes, CI/CD, Cloud Infrastructure.  
-GitHub: [devops-success-true](https://github.com/devops-success-true)
+Focus: AWS, Terraform, Kubernetes, CI/CD, and Cloud Infrastructure Automation.  
+
+This project was built with inspiration and references from advanced open-source implementations, adapted and re-engineered to follow production-grade DevOps patterns.
+
+**Referenced Repositories:**
+- [AWS EKS + Karpenter + Cluster Autoscaler by srikanthhg](https://github.com/srikanthhg/AWS-EKS/tree/main/EKS%2BKarpenter%20Cluster%20Autoscaler)
+- [Anton Putra’s DevOps Lesson 195](https://github.com/antonputra/tutorials/tree/main/lessons/195)
 
 ---
 
